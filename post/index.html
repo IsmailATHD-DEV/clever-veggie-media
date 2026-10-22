@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Post">
+<title>clever.veggie — post</title>
+<style>
+:root{--bg:#0d0e10;--panel:#16181b;--line:#272b31;--ink:#f2efe9;--mute:#9a9ea6;--acc:#f2b233}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 -apple-system,system-ui,sans-serif;padding:16px;max-width:560px;margin:auto}
+h1{font-size:21px;margin:4px 0 2px;text-transform:uppercase;letter-spacing:.02em}
+.mute{color:var(--mute);font-size:13px}
+.btn{display:block;width:100%;text-align:center;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px;margin:10px 0;color:var(--ink);text-decoration:none;font:inherit;font-weight:700}
+.btn.primary{background:var(--acc);color:#1a1205;border-color:var(--acc)}
+.cap{background:var(--panel);border-radius:12px;padding:12px;white-space:pre-wrap;font-size:15px;user-select:all;-webkit-user-select:all}
+.steps{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 12px 12px 30px;font-size:15px}
+.steps li{margin:4px 0}
+.warn{background:#3a1414;border:1px solid #ff6b6b;border-radius:12px;padding:12px;font-size:15px;margin:10px 0}
+</style>
+</head>
+<body>
+<div id="app" class="mute">Loading…</div>
+<script>
+// D-067: the phone page lives on GitHub Pages (HTTPS, any network, no Windows firewall); the dashboard rewrites latest.json
+// at every ↗ Send video. Bookmark once / Add to Home Screen.
+function copyText(t, btn, label) {
+  const done = () => { btn.textContent = '✓ Copied — ' + label; btn.classList.add('primary'); };
+  const legacy = () => {
+    const ta = document.createElement('textarea');
+    ta.value = t; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+    document.body.appendChild(ta); ta.focus(); ta.select(); ta.setSelectionRange(0, t.length);
+    let ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(ta);
+    ok ? done() : (btn.textContent = 'Tap the text below → Copy');
+  };
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t).then(done, legacy); else legacy();
+}
+const esc = t => String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+fetch('latest.json?t=' + Date.now(), {cache: 'no-store'}).then(r => r.json()).then(d => {
+  document.getElementById('app').outerHTML = `<div>
+    <h1>🎬 ${esc(d.cover || d.title)}</h1>
+    <div class="mute">${esc(d.title)} · sent ${esc((d.sent_at || '').replace('T', ' ').slice(0, 16))}</div>
+    <button class="btn primary" id="cDesc">1 · Copy the description</button>
+    <div class="cap">${esc(d.description)}</div>
+    <ol class="steps">
+      <li>TikTok → <b>Inbox</b> → the newest TikTok upload notification (it arrives when TikTok has processed the video, often 5–20 min) → editor. <b>No music</b> → <b>Next</b>.</li>
+      <li>Tap the description box → long-press → <b>Paste</b>.</li>
+      <li><b>Edit cover</b> → the <b>very first frame</b> (the big title) → Save.</li>
+      <li><b>More options → AI-generated content: ON.</b></li>
+      <li>Everyone can view · comments, Duet, Stitch ON · <b>Post</b>.</li>
+      <li>Open the posted video → paste the comment below → long-press it → <b>Pin</b>.</li>
+    </ol>
+    <div class="warn">⚠️ AI-generated content ON for every video (TikTok strikes unlabelled AI).</div>
+    ${d.pinned_comment ? `<button class="btn" id="cPin">2 · Copy the pinned comment</button><div class="cap">${esc(d.pinned_comment)}</div>` : ''}
+  </div>`;
+  document.getElementById('cDesc').onclick = e => copyText(d.description, e.target, 'paste it in TikTok');
+  if (d.pinned_comment) document.getElementById('cPin').onclick = e => copyText(d.pinned_comment, e.target, 'paste it as a comment, then Pin');
+}).catch(() => { document.getElementById('app').textContent = 'No video sent yet (or GitHub Pages is still publishing — try again in a minute).'; });
+</script>
+</body>
+</html>
