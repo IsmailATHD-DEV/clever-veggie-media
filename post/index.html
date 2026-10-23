@@ -38,14 +38,38 @@ function copyText(t, btn, label) {
   if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t).then(done, legacy); else legacy();
 }
 const esc = t => String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
-fetch('latest.json?t=' + Date.now(), {cache: 'no-store'}).then(r => r.json()).then(d => {
+// D-072: data comes from the GitHub API (fresh ~1 min after the dashboard pushes; GitHub Pages' CDN served a
+// 10-min-old latest.json and showed the Mexico text on the coffee QR). ?run=<id> = that exact video.
+const owner = location.hostname.split('.')[0], repo = location.pathname.split('/').filter(Boolean)[0] || '';
+const run = new URLSearchParams(location.search).get('run');
+async function getJSON(path) {
+  try {
+    const r = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/post/${path}?t=${Date.now()}`,
+                          {headers: {Accept: 'application/vnd.github.raw'}, cache: 'no-store'});
+    if (r.ok) { const t = await r.text(); const j = JSON.parse(t); if (j && j.content && j.encoding === 'base64') return JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(j.content.replace(/\n/g, '')), c => c.charCodeAt(0)))); return j; }
+  } catch (e) {}
+  const r2 = await fetch(path + '?t=' + Date.now(), {cache: 'no-store'});   // fallback: the Pages copy
+  if (!r2.ok) throw new Error(r2.status);
+  return r2.json();
+}
+async function show(tries = 0) {
+  let d, list = [];
+  try {
+    d = await getJSON(run ? `runs/${run}.json` : 'latest.json');
+    try { list = await getJSON('index.json'); } catch (e) {}
+  } catch (e) {
+    if (tries < 12) { document.getElementById('app').textContent = 'Publishing this video\'s page… (retrying)'; return setTimeout(() => show(tries + 1), 5000); }
+    document.getElementById('app').textContent = 'No page for this video yet — click 📱 Phone on its run in the dashboard.';
+    return;
+  }
+  const others = (list || []).filter(x => x.run_id !== d.run_id).slice(0, 5);
   document.getElementById('app').outerHTML = `<div>
     <h1>🎬 ${esc(d.cover || d.title)}</h1>
-    <div class="mute">${esc(d.title)} · sent ${esc((d.sent_at || '').replace('T', ' ').slice(0, 16))}</div>
+    <div class="mute">${esc(d.title)} · run ${esc(d.run_id)} · ${esc((d.sent_at || '').replace('T', ' ').slice(0, 16))}</div>
     <button class="btn primary" id="cDesc">1 · Copy the description</button>
     <div class="cap">${esc(d.description)}</div>
     <ol class="steps">
-      <li>TikTok → <b>Inbox</b> → the newest TikTok upload notification (it arrives when TikTok has processed the video, often 5–20 min) → editor. <b>No music</b> → <b>Next</b>.</li>
+      <li>TikTok → <b>Inbox</b> → the upload of <b>this</b> video (TikTok delivers it 5–20 min after sending; the editor's first frame shows <b>${esc(d.cover || d.title)}</b>) → <b>No music</b> → <b>Next</b>.</li>
       <li>Tap the description box → long-press → <b>Paste</b>.</li>
       <li><b>Edit cover</b> → the <b>very first frame</b> (the big title) → Save.</li>
       <li><b>More options → AI-generated content: ON.</b></li>
@@ -54,10 +78,12 @@ fetch('latest.json?t=' + Date.now(), {cache: 'no-store'}).then(r => r.json()).th
     </ol>
     <div class="warn">⚠️ AI-generated content ON for every video (TikTok strikes unlabelled AI).</div>
     ${d.pinned_comment ? `<button class="btn" id="cPin">2 · Copy the pinned comment</button><div class="cap">${esc(d.pinned_comment)}</div>` : ''}
+    ${others.length ? `<div class="mute" style="margin-top:18px">Other recent videos:</div>${others.map(x => `<a class="btn" href="?run=${encodeURIComponent(x.run_id)}">${esc(x.cover || x.title)} <span class="mute">· ${esc((x.sent_at || '').slice(5, 16).replace('T', ' '))}</span></a>`).join('')}` : ''}
   </div>`;
   document.getElementById('cDesc').onclick = e => copyText(d.description, e.target, 'paste it in TikTok');
   if (d.pinned_comment) document.getElementById('cPin').onclick = e => copyText(d.pinned_comment, e.target, 'paste it as a comment, then Pin');
-}).catch(() => { document.getElementById('app').textContent = 'No video sent yet (or GitHub Pages is still publishing — try again in a minute).'; });
+}
+show();
 </script>
 </body>
 </html>
